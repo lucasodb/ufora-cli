@@ -659,8 +659,8 @@ def download_materials(ufora, course_id, materials, base_dir, progress_task=None
 @cli.command()
 @click.argument('course_id', type=int)
 @click.option('--dir', '-d', default=None, help='Target directory (relative or absolute path)')
-@click.option('--here', '-h', is_flag=True, help='Download to current working directory')
-def download(course_id, dir, here):
+@click.option('--base', '-b', is_flag=True, help='Download to configured base directory')
+def download(course_id, dir, base):
     """Download course materials"""
     config = load_config()
     courses = config.get('courses', [])
@@ -672,13 +672,16 @@ def download(course_id, dir, here):
     course = courses[course_id - 1]
     
     # Determine target directory
-    if here:
-        target_dir = Path.cwd()
-    elif dir:
+    if dir:
+        # Explicit directory specified
         target_dir = Path(dir).expanduser().resolve()
-    else:
+    elif base:
+        # Use saved/configured base directory
         base_dir = config.get('base_directory', str(Path.home() / 'uni'))
         target_dir = Path(base_dir) / course['name']
+    else:
+        # Default: current working directory
+        target_dir = Path.cwd()
     
     target_dir.mkdir(parents=True, exist_ok=True)
     
@@ -839,7 +842,11 @@ def download(course_id, dir, here):
                     
                     # Create subfolder directory
                     folder_name = re.sub(r'[<>:"/\\|?*]', '_', selected_subfolder['name'])
-                    subfolder_dir = target_dir / folder_name
+                    # Add files under folder name if we are downloading to set base directory
+                    if base:
+                        subfolder_dir = target_dir / folder_name
+                    else:
+                        subfolder_dir = target_dir
                     subfolder_dir.mkdir(parents=True, exist_ok=True)
                     
                     console.print()
