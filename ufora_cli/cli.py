@@ -154,11 +154,18 @@ class UforaSession:
                 
                 # Convert to requests format
                 for cookie in cookies:
+
+                    expires = None
+                    if 'expires' in cookie and cookie['expires'] != -1:
+                        expires = int(cookie['expires'])
+
                     self.session.cookies.set(
                         cookie['name'],
                         cookie['value'],
                         domain=cookie.get('domain', ''),
-                        path=cookie.get('path', '/')
+                        path=cookie.get('path', '/'),
+                        secure=cookie.get('secure', False),
+                        expires=expires
                     )
                 
                 self.save_cookies()
@@ -168,13 +175,108 @@ class UforaSession:
                 console.print(f"[red]✗ Login failed: {e}[/red]")
                 browser.close()
     
+    def refresh_session_with_persistent_cookies(self):
+        """Try to get new session cookies using persistent Microsoft cookies"""
+        try:
+            console.print("[yellow]Refreshing with saved credentials...[/yellow]")
+            
+            from playwright.sync_api import sync_playwright
+            
+            with sync_playwright() as p:
+                browser = p.firefox.launch(headless=True)
+                
+                # Create context with our existing cookies
+                context = browser.new_context(
+                    locale='en-US',
+                    extra_http_headers={
+                        'Accept-Language': 'en-US,en;q=0.9'
+                    }
+                )
+                
+                # Add all our cookies to the browser context
+                playwright_cookies = []
+                for cookie in self.session.cookies:
+                    playwright_cookie = {
+                        'name': cookie.name,
+                        'value': cookie.value,
+                        'domain': cookie.domain,
+                        'path': cookie.path,
+                    }
+                    if cookie.expires:
+                        playwright_cookie['expires'] = cookie.expires
+                    if cookie.secure:
+                        playwright_cookie['secure'] = True
+                        
+                    playwright_cookies.append(playwright_cookie)
+                
+                context.add_cookies(playwright_cookies)
+                
+                page = context.new_page()
+                
+                # Navigate to Ufora - should get to welcome page
+                page.goto(BASE_URL, timeout=30000)
+                page.wait_for_timeout(2000)
+                
+                # If we're at the welcome page, click the Ufora login button
+                if 'elosp.ugent.be/welcome' in page.url:
+                    console.print("[yellow]At welcome page, clicking Ufora login...[/yellow]")
+                    try:
+                        # Click the Ufora login button
+                        page.locator('text=Ufora login').click()
+                        
+                        # Wait for navigation to complete
+                        page.wait_for_url('**/d2l/home**', timeout=30000)
+                    except Exception as e:
+                        console.print(f"[yellow]Could not click login button: {e}[/yellow]")
+                
+                final_url = page.url
+                
+                # Check if we're authenticated
+                if 'ufora.ugent.be' in final_url and 'elosp' not in final_url:
+                    # Extract new cookies
+                    new_cookies = context.cookies()
+                    
+                    # Update session with new cookies
+                    for cookie in new_cookies:
+                        expires = None
+                        if 'expires' in cookie and cookie['expires'] != -1:
+                            expires = int(cookie['expires'])
+                        
+                        self.session.cookies.set(
+                            cookie['name'],
+                            cookie['value'],
+                            domain=cookie.get('domain', ''),
+                            path=cookie.get('path', '/'),
+                            secure=cookie.get('secure', False),
+                            expires=expires
+                        )
+                    
+                    browser.close()
+                    self.save_cookies()
+                    console.print("[green]✓ Session refreshed successfully![/green]")
+                    return True
+                
+                browser.close()
+                console.print(f"[yellow]Could not refresh - ended at: {final_url}[/yellow]")
+                return False
+                
+        except Exception as e:
+            console.print(f"[yellow]Session refresh failed: {e}[/yellow]")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def ensure_authenticated(self):
         """Ensure we have a valid authenticated session"""
         if self.load_cookies():
             if self.is_authenticated():
                 return
             else:
-                console.print("[yellow]Session expired, need to re-login[/yellow]")
+                console.print("[yellow]Session expired...[/yellow]")
+                # Try to refresh using persistent cookies first
+                if self.refresh_session_with_persistent_cookies():
+                    return
+                console.print("[yellow]Need to re-login with password/2FA[/yellow]")
         
         self.login_with_browser()
     
