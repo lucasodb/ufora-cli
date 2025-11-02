@@ -224,10 +224,33 @@ class UforaSession:
                         # Click the Ufora login button
                         page.locator('text=Ufora login').click()
                         
-                        # Wait for navigation to complete
-                        page.wait_for_url('**/d2l/home**', timeout=30000)
+                        # Wait a bit for redirect
+                        page.wait_for_timeout(3000)
+                        
+                        # Check if we're at Microsoft account picker
+                        if 'login.microsoftonline.com' in page.url and 'select_account' in page.url:
+                            console.print("[yellow]At account picker, selecting account...[/yellow]")
+                            try:
+                                # Click on the first account (your signed-in account)
+                                account = page.locator('div.table-row').filter(has_text='Signed in').first
+                                account.click()
+
+                                # Wait for navigation to complete
+                                page.wait_for_url('**/d2l/home**', timeout=20000)
+                            except Exception as e:
+                                console.print(f"Could not select account: {e}")
+                                # Try alternative selector
+                                try:
+                                    page.locator('div[role="button"]:has-text("Signed in")').click()
+                                    page.wait_for_url('**/d2l/home**', timeout=30000)
+                                except:
+                                    pass
+                        else:
+                            # Not at account picker, maybe already navigated through
+                            page.wait_for_url('**/d2l/home**', timeout=30000)
+                        
                     except Exception as e:
-                        console.print(f"[yellow]Could not click login button: {e}[/yellow]")
+                        console.print(f"Navigation error: {e}")
                 
                 final_url = page.url
                 
@@ -257,13 +280,11 @@ class UforaSession:
                     return True
                 
                 browser.close()
-                console.print(f"[yellow]Could not refresh - ended at: {final_url}[/yellow]")
+                console.print(f"[yellow]Could not refresh ...[/yellow]")
                 return False
                 
         except Exception as e:
             console.print(f"[yellow]Session refresh failed: {e}[/yellow]")
-            import traceback
-            traceback.print_exc()
             return False
 
     def ensure_authenticated(self):
