@@ -661,7 +661,7 @@ def courses():
             # Parse the start date (assuming it's in ISO 8601 format)
             try:
                 start_datetime = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-                if start_datetime.year == current_year:
+                if start_datetime.year == current_year or start_datetime.year == current_year-1:
                     filtered_courses.append(course)
             except ValueError:
                 # If the date is not in a valid format, skip it
