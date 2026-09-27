@@ -641,7 +641,7 @@ def login():
 
 @cli.command()
 def courses():
-    """List all your courses that started this year"""
+    """List all your courses for the current academic year (Sep-Aug)"""
     session = UforaSession()
     session.ensure_authenticated()
     
@@ -652,28 +652,30 @@ def courses():
         console.print("[yellow]No courses found. You may need to adjust the scraping selectors.[/yellow]")
         return
     
-    current_year = datetime.now().year
+    now = datetime.now()
+    # Academic year runs Sep 1 to Aug 31. From Sep onward use this year's
+    # September; before Sep use last year's September.
+    academic_start_year = now.year if now.month >= 9 else now.year - 1
+    academic_year_start = datetime(academic_start_year, 9, 1).date()
     
-    # Filter courses to include only those starting in the current year
     filtered_courses = []
     for course in course_list:
         start_date = course.get('start')
         if start_date:
-            # Parse the start date (assuming it's in ISO 8601 format)
             try:
                 start_datetime = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-                if start_datetime.year == current_year or start_datetime.year == current_year-1:
+                if start_datetime.date() >= academic_year_start:
                     filtered_courses.append(course)
             except ValueError:
-                # If the date is not in a valid format, skip it
                 continue
     
+    academic_label = f"{academic_start_year}-{academic_start_year + 1}"
+
     if not filtered_courses:
-        console.print(f"[yellow]No courses started in {current_year} found.[/yellow]")
+        console.print(f"[yellow]No courses found for academic year {academic_label}.[/yellow]")
         return
     
-    # Display the filtered courses
-    table = Table(title=f"Your Courses Started in {current_year}", header_style="bold green")
+    table = Table(title=f"Your Courses {academic_label}", header_style="bold green")
     table.add_column("ID", style="bold cyan")
     table.add_column("Course Name")
     
